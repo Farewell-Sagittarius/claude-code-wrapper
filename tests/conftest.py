@@ -65,6 +65,7 @@ def light_headers() -> dict:
     return {
         "Authorization": f"Bearer {API_KEYS['light']}",
         "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
     }
 
 
@@ -74,6 +75,7 @@ def basic_headers() -> dict:
     return {
         "Authorization": f"Bearer {API_KEYS['basic']}",
         "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
     }
 
 
@@ -83,6 +85,7 @@ def heavy_headers() -> dict:
     return {
         "Authorization": f"Bearer {API_KEYS['heavy']}",
         "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
     }
 
 
@@ -92,25 +95,17 @@ def custom_headers() -> dict:
     return {
         "Authorization": f"Bearer {API_KEYS['custom']}",
         "Content-Type": "application/json",
-    }
-
-
-@pytest.fixture
-def anthropic_headers() -> dict:
-    """Headers for Anthropic API format."""
-    return {
-        "Authorization": f"Bearer {API_KEYS['basic']}",
-        "Content-Type": "application/json",
         "anthropic-version": "2023-06-01",
     }
 
 
 @pytest.fixture
-def simple_chat_request() -> dict:
-    """Simple chat completion request."""
+def anthropic_headers() -> dict:
+    """Headers for Anthropic API format (alias for basic_headers)."""
     return {
-        "model": "claude-code-opus",
-        "messages": [{"role": "user", "content": "Say 'test' and nothing else"}],
+        "Authorization": f"Bearer {API_KEYS['basic']}",
+        "Content-Type": "application/json",
+        "anthropic-version": "2023-06-01",
     }
 
 
@@ -125,27 +120,31 @@ def simple_anthropic_request() -> dict:
 
 
 @pytest.fixture
-def streaming_chat_request() -> dict:
-    """Streaming chat completion request."""
+def streaming_anthropic_request() -> dict:
+    """Streaming Anthropic messages request."""
     return {
         "model": "claude-code-opus",
+        "max_tokens": 100,
         "messages": [{"role": "user", "content": "Say 'hello' and nothing else"}],
         "stream": True,
     }
 
 
 @pytest.fixture
-def multimodal_message() -> dict:
-    """Multimodal message with text and image placeholder."""
-    # Small 1x1 red PNG in base64
+def multimodal_anthropic_message() -> dict:
+    """Multimodal message with text and image in Anthropic format."""
     red_pixel_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
     return {
         "role": "user",
         "content": [
             {"type": "text", "text": "Describe this image briefly"},
             {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{red_pixel_png}"},
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": red_pixel_png,
+                },
             },
         ],
     }

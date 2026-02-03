@@ -16,9 +16,7 @@ class TestHealthEndpoints:
         assert data["name"] == "Claude Code Wrapper"
         assert data["version"] == "1.0.0"
         assert "endpoints" in data
-        assert data["endpoints"]["chat"] == "/v1/chat/completions"
         assert data["endpoints"]["messages"] == "/v1/messages"
-        assert data["endpoints"]["models"] == "/v1/models"
         assert data["endpoints"]["sessions"] == "/v1/sessions"
         assert data["endpoints"]["health"] == "/health"
 
