@@ -9,6 +9,8 @@ from .content import (
     ImageBlock,
     TextBlock,
     TextDocumentSource,
+    ToolResultBlock,
+    ToolUseBlock,
     UrlDocumentSource,
     UrlImageSource,
 )
@@ -40,6 +42,8 @@ __all__ = [
     "ImageBlock",
     "TextBlock",
     "TextDocumentSource",
+    "ToolResultBlock",
+    "ToolUseBlock",
     "UrlDocumentSource",
     "UrlImageSource",
     # Request

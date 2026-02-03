@@ -85,8 +85,36 @@ class DocumentBlock(BaseModel):
 
 
 # =============================================================================
+# Tool Use Block (assistant response)
+# =============================================================================
+
+
+class ToolUseBlock(BaseModel):
+    """Anthropic tool_use content block for assistant responses."""
+
+    type: Literal["tool_use"] = "tool_use"
+    id: str  # e.g., "toolu_01abc..."
+    name: str
+    input: dict
+
+
+# =============================================================================
+# Tool Result Block (user message)
+# =============================================================================
+
+
+class ToolResultBlock(BaseModel):
+    """Anthropic tool_result content block for user messages."""
+
+    type: Literal["tool_result"] = "tool_result"
+    tool_use_id: str
+    content: Optional[Union[str, list]] = None
+    is_error: bool = False
+
+
+# =============================================================================
 # Union Type
 # =============================================================================
 
 
-ContentBlock = Union[TextBlock, ImageBlock, DocumentBlock]
+ContentBlock = Union[TextBlock, ImageBlock, DocumentBlock, ToolUseBlock, ToolResultBlock]

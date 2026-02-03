@@ -99,6 +99,8 @@ class ClaudeService:
         mcp_servers: Optional[Dict[str, Any]] = None,
         stream: bool = False,
         max_thinking_tokens: Optional[int] = None,
+        can_use_tool: Optional[Any] = None,
+        external_tools_mcp: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Execute Claude query and yield message chunks.
@@ -116,6 +118,8 @@ class ClaudeService:
             mcp_servers: External MCP servers from request (always enabled if provided)
             stream: Whether to enable streaming (partial messages)
             max_thinking_tokens: Extended thinking token budget (None = disabled)
+            can_use_tool: Optional callback for tool permission checking (external tools)
+            external_tools_mcp: Optional MCP config for external tools
 
         Yields:
             Message dictionaries from Claude
@@ -197,6 +201,17 @@ class ClaudeService:
                 logger.info(f"Internal MCP mode enabled with servers: {list(options.mcp_servers.keys())}")
             else:
                 logger.info("Internal MCP mode enabled (loading user settings with plugins)")
+
+        # External tools via MCP
+        if external_tools_mcp:
+            existing = options.mcp_servers or {}
+            options.mcp_servers = {**existing, **external_tools_mcp}
+            logger.info(f"External tools MCP configured: {list(external_tools_mcp.keys())}")
+
+        # Can use tool callback (for external tool interception)
+        if can_use_tool:
+            options.can_use_tool = can_use_tool
+            logger.debug("can_use_tool callback configured for external tools")
 
         # Session resumption
         if session_id:

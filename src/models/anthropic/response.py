@@ -1,11 +1,11 @@
 """Anthropic messages response models."""
 
 import uuid
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from .content import TextBlock
+from .content import TextBlock, ToolUseBlock
 
 
 class Usage(BaseModel):
@@ -21,9 +21,9 @@ class MessagesResponse(BaseModel):
     id: str = Field(default_factory=lambda: f"msg_{uuid.uuid4().hex[:24]}")
     type: Literal["message"] = "message"
     role: Literal["assistant"] = "assistant"
-    content: List[TextBlock]
+    content: List[Union[TextBlock, ToolUseBlock]]
     model: str
-    stop_reason: Optional[Literal["end_turn", "max_tokens", "stop_sequence"]] = "end_turn"
+    stop_reason: Optional[Literal["end_turn", "max_tokens", "stop_sequence", "tool_use"]] = "end_turn"
     stop_sequence: Optional[str] = None
     usage: Usage
 

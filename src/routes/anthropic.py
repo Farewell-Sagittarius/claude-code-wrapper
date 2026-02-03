@@ -24,10 +24,17 @@ from ..models.anthropic import (
     MessagesResponse,
     TextBlock,
     TextDelta,
+    ToolUseBlock,
     Usage,
 )
 from ..services.claude import ClaudeService
 from ..services.session import SessionManager
+from ..services.tools import (
+    ExternalToolsContext,
+    classify_tools,
+    create_can_use_tool_callback,
+    create_external_tools_mcp_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +67,10 @@ class MessagesContext:
     max_thinking_tokens: Optional[int] = None
     session_id: Optional[str] = None  # Determined session ID (via hash or explicit)
     messages_for_hash: Optional[List[Dict[str, Any]]] = None  # Original messages for hash storage
+    # External tools support
+    external_tools_context: Optional[ExternalToolsContext] = None
+    external_tools_mcp: Optional[Dict[str, Any]] = None
+    can_use_tool_callback: Optional[Any] = None
 
 
 async def _build_messages_context(
@@ -143,6 +154,28 @@ async def _build_messages_context(
         max_thinking_tokens = request.thinking.budget_tokens
         logger.debug(f"thinking.budget_tokens={max_thinking_tokens}")
 
+    # External tools handling
+    external_tools_context = None
+    external_tools_mcp = None
+    can_use_tool_callback = None
+
+    if request.tools:
+        # Convert ToolDefinition to dict format
+        tools_dicts = [
+            {"name": t.name, "description": t.description, "input_schema": t.input_schema}
+            for t in request.tools
+        ]
+        # Classify tools into internal and external
+        internal_tools, external_tools = classify_tools(tools_dicts)
+
+        # Set up external tools if any
+        if external_tools:
+            external_tools_context = ExternalToolsContext()
+            external_tools_mcp, tool_names = create_external_tools_mcp_config(external_tools)
+            external_tools_context.external_tool_names = tool_names
+            can_use_tool_callback = create_can_use_tool_callback(external_tools_context)
+            logger.info(f"External tools configured: {tool_names}")
+
     logger.debug(
         f"Request {request_id}: stream={request.stream}, model={request.model}, "
         f"tool_mode={auth.tool_mode}, internal_tools={enable_internal_tools}"
@@ -160,6 +193,9 @@ async def _build_messages_context(
         max_thinking_tokens=max_thinking_tokens,
         session_id=session_id,
         messages_for_hash=internal_messages,  # Store for hash mapping after response
+        external_tools_context=external_tools_context,
+        external_tools_mcp=external_tools_mcp,
+        can_use_tool_callback=can_use_tool_callback,
     )
 
 
@@ -280,6 +316,8 @@ async def generate_anthropic_stream(ctx: MessagesContext):
             mcp_servers=ctx.mcp_servers_dict,
             stream=True,
             max_thinking_tokens=ctx.max_thinking_tokens,
+            can_use_tool=ctx.can_use_tool_callback,
+            external_tools_mcp=ctx.external_tools_mcp,
         ):
             messages_buffer.append(chunk)
 
@@ -317,6 +355,52 @@ async def generate_anthropic_stream(ctx: MessagesContext):
                     delta=TextDelta(text=new_content),
                 )
                 yield f"event: content_block_delta\ndata: {block_delta.model_dump_json()}\n\n"
+
+        # Check for pending external tool use
+        if ctx.external_tools_context and ctx.external_tools_context.pending_tool_use:
+            tool_use = ctx.external_tools_context.pending_tool_use
+
+            # Close any text content block if started
+            if content_started:
+                block_stop = ContentBlockStop(index=0)
+                yield f"event: content_block_stop\ndata: {block_stop.model_dump_json()}\n\n"
+
+            # Send tool_use content block
+            tool_use_block = {
+                "type": "tool_use",
+                "id": tool_use.id,
+                "name": tool_use.name,
+                "input": tool_use.input,
+            }
+            block_index = 1 if content_started else 0
+            block_start = ContentBlockStart(
+                index=block_index,
+                content_block=tool_use_block,
+            )
+            yield f"event: content_block_start\ndata: {json.dumps(block_start.model_dump())}\n\n"
+
+            block_stop = ContentBlockStop(index=block_index)
+            yield f"event: content_block_stop\ndata: {block_stop.model_dump_json()}\n\n"
+
+            # Get usage
+            usage_data = claude_service.extract_usage(messages_buffer)
+            if not usage_data:
+                usage_data = claude_service.estimate_usage(ctx.prompt, "", request.model)
+
+            # Send message_delta with tool_use stop_reason
+            message_delta = MessageDelta(
+                delta={"stop_reason": "tool_use"},
+                usage=Usage(
+                    input_tokens=usage_data.get("input_tokens", 0),
+                    output_tokens=usage_data.get("output_tokens", 0),
+                ),
+            )
+            yield f"event: message_delta\ndata: {message_delta.model_dump_json()}\n\n"
+
+            # Send message_stop
+            message_stop = MessageStop()
+            yield f"event: message_stop\ndata: {message_stop.model_dump_json()}\n\n"
+            return
 
         # Store response in session and hash mapping for future lookups
         if ctx.session_id and accumulated_content:
@@ -381,6 +465,8 @@ async def generate_anthropic_response(ctx: MessagesContext) -> MessagesResponse:
             disallowed_tools=request.disallowed_tools,
             mcp_servers=ctx.mcp_servers_dict,
             max_thinking_tokens=ctx.max_thinking_tokens,
+            can_use_tool=ctx.can_use_tool_callback,
+            external_tools_mcp=ctx.external_tools_mcp,
         ):
             messages_buffer.append(chunk)
 
@@ -389,6 +475,32 @@ async def generate_anthropic_response(ctx: MessagesContext) -> MessagesResponse:
                 new_session_id = claude_service.get_session_id([chunk])
                 if new_session_id:
                     session_manager.set_claude_session(ctx.session_id, new_session_id)
+
+        # Check for pending external tool use
+        if ctx.external_tools_context and ctx.external_tools_context.pending_tool_use:
+            tool_use = ctx.external_tools_context.pending_tool_use
+            # Get usage (real or estimated)
+            usage_data = claude_service.extract_usage(messages_buffer)
+            if not usage_data:
+                usage_data = claude_service.estimate_usage(ctx.prompt, "", request.model)
+
+            # Return tool_use response to client
+            return MessagesResponse(
+                id=ctx.request_id,
+                model=request.model,
+                content=[
+                    ToolUseBlock(
+                        id=tool_use.id,
+                        name=tool_use.name,
+                        input=tool_use.input,
+                    )
+                ],
+                stop_reason="tool_use",
+                usage=Usage(
+                    input_tokens=usage_data.get("input_tokens", 0),
+                    output_tokens=usage_data.get("output_tokens", 0),
+                ),
+            )
 
         # Extract and filter response
         raw_content = claude_service.extract_response(messages_buffer)
