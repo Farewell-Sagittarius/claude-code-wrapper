@@ -21,7 +21,7 @@
 | `stream` | boolean | ❌ | 是否流式 | ✅ 支持 |
 | `metadata` | object | ❌ | 请求元数据 | ⚠️ 接收但忽略 |
 | `thinking` | object | ❌ | 扩展思维配置 | ✅ 支持 |
-| `tools` | array | ❌ | 工具定义列表 | ⚠️ 接收但忽略 |
+| `tools` | array | ❌ | 工具定义列表 | ✅ 支持（外部工具） |
 | `tool_choice` | object | ❌ | 工具选择策略 | ⚠️ 接收但忽略 |
 
 ---
@@ -45,9 +45,9 @@
 | `id` | string | ✅ 支持，格式 `msg_*` |
 | `type` | string | ✅ 固定 `"message"` |
 | `role` | string | ✅ 固定 `"assistant"` |
-| `content` | array | ✅ 支持 |
+| `content` | array | ✅ 支持（text, tool_use） |
 | `model` | string | ✅ 支持 |
-| `stop_reason` | string | ✅ 支持 |
+| `stop_reason` | string | ✅ 支持（end_turn, tool_use, max_tokens） |
 | `stop_sequence` | string | ⚠️ 始终 null |
 | `usage` | object | ✅ 支持 |
 | `usage.input_tokens` | integer | ✅ 支持 |
@@ -64,8 +64,82 @@
 | `image` (url) | ✅ 兼容 | 下载并缓存 |
 | `document` (text) | ✅ 兼容 | 缓存到文件 |
 | `document` (base64 PDF) | ✅ 兼容 | 缓存到文件 |
-| `tool_use` | ⚠️ 透传 | 传递给 Claude SDK |
-| `tool_result` | ⚠️ 透传 | 传递给 Claude SDK |
+| `tool_use` | ✅ 支持 | 外部工具调用（响应） |
+| `tool_result` | ✅ 支持 | 工具执行结果（请求） |
+
+---
+
+## 外部工具 (External Tools)
+
+支持 Anthropic 原生 `tools` 参数，实现外部工具调用。
+
+### 工具定义
+
+```json
+{
+  "tools": [
+    {
+      "name": "get_weather",
+      "description": "Get current weather for a location",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "location": {"type": "string", "description": "City name"}
+        },
+        "required": ["location"]
+      }
+    }
+  ]
+}
+```
+
+### 工具分类
+
+| 工具类型 | 处理方式 |
+|----------|----------|
+| 内置工具 | SDK 自动执行（Read, Write, Bash 等） |
+| 外部工具 | 返回 `tool_use` 响应，由客户端执行 |
+
+### 调用流程
+
+1. **请求**: 客户端发送带 `tools` 的请求
+2. **响应**: 若 Claude 需要调用外部工具，返回 `stop_reason: "tool_use"`
+3. **执行**: 客户端执行工具，获取结果
+4. **继续**: 客户端发送包含 `tool_result` 的新消息
+5. **完成**: Wrapper 通过对话历史 hash 自动恢复会话
+
+### 响应示例
+
+```json
+{
+  "id": "msg_xxx",
+  "content": [
+    {
+      "type": "tool_use",
+      "id": "toolu_01abc",
+      "name": "get_weather",
+      "input": {"location": "Paris"}
+    }
+  ],
+  "stop_reason": "tool_use"
+}
+```
+
+### tool_result 请求示例
+
+```json
+{
+  "messages": [
+    {"role": "user", "content": "What's the weather in Paris?"},
+    {"role": "assistant", "content": [
+      {"type": "tool_use", "id": "toolu_01abc", "name": "get_weather", "input": {"location": "Paris"}}
+    ]},
+    {"role": "user", "content": [
+      {"type": "tool_result", "tool_use_id": "toolu_01abc", "content": "Sunny, 22°C"}
+    ]}
+  ]
+}
+```
 
 ---
 
