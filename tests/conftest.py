@@ -3,18 +3,15 @@
 import asyncio
 import os
 import sys
-from typing import AsyncGenerator, Generator
+from typing import Generator
 
 import pytest
-import pytest_asyncio
 from fastapi.testclient import TestClient
-from httpx import ASGITransport, AsyncClient
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.main import app
-from src.config import settings
 
 
 # API Keys for different tool modes
@@ -24,16 +21,6 @@ API_KEYS = {
     "heavy": "sk-heavy-dev",
     "custom": "sk-custom-dev",
 }
-
-# Test models
-TEST_MODELS = [
-    "claude-code-opus",
-    "claude-code-sonnet",
-    "claude-code-haiku",
-]
-
-# Base URL for tests
-BASE_URL = "http://test"
 
 
 @pytest.fixture(scope="session")
@@ -49,14 +36,6 @@ def client() -> Generator[TestClient, None, None]:
     """Create synchronous test client."""
     with TestClient(app) as c:
         yield c
-
-
-@pytest_asyncio.fixture(scope="module")
-async def async_client() -> AsyncGenerator[AsyncClient, None]:
-    """Create async test client."""
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url=BASE_URL) as ac:
-        yield ac
 
 
 @pytest.fixture
@@ -107,54 +86,3 @@ def anthropic_headers() -> dict:
         "Content-Type": "application/json",
         "anthropic-version": "2023-06-01",
     }
-
-
-@pytest.fixture
-def simple_anthropic_request() -> dict:
-    """Simple Anthropic messages request."""
-    return {
-        "model": "claude-code-opus",
-        "max_tokens": 100,
-        "messages": [{"role": "user", "content": "Say 'test' and nothing else"}],
-    }
-
-
-@pytest.fixture
-def streaming_anthropic_request() -> dict:
-    """Streaming Anthropic messages request."""
-    return {
-        "model": "claude-code-opus",
-        "max_tokens": 100,
-        "messages": [{"role": "user", "content": "Say 'hello' and nothing else"}],
-        "stream": True,
-    }
-
-
-@pytest.fixture
-def multimodal_anthropic_message() -> dict:
-    """Multimodal message with text and image in Anthropic format."""
-    red_pixel_png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
-    return {
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "Describe this image briefly"},
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": red_pixel_png,
-                },
-            },
-        ],
-    }
-
-
-@pytest.fixture
-def conversation_messages() -> list:
-    """Multi-turn conversation messages."""
-    return [
-        {"role": "user", "content": "My name is TestUser"},
-        {"role": "assistant", "content": "Hello TestUser!"},
-        {"role": "user", "content": "What is my name?"},
-    ]
