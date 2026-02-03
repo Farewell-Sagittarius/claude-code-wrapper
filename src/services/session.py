@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from threading import Lock
 from typing import Dict, List, Optional
 
-from ..models.openai import Message
+from ..models.anthropic import Message
 
 logger = logging.getLogger(__name__)
 

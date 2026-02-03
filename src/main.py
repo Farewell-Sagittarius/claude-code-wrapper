@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import settings
-from .routes import anthropic, chat, models, sessions
+from .routes import anthropic, sessions
 from .services.claude import ClaudeService
 from .services.session import SessionManager
 
@@ -31,7 +31,6 @@ async def lifespan(app: FastAPI):
     logger.info("Starting Claude Code Wrapper...")
 
     # Initialize route services
-    chat.init_services(claude_service, session_manager)
     anthropic.init_services(claude_service, session_manager)
     sessions.init_session_manager(session_manager)
 
@@ -51,7 +50,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Claude Code Wrapper",
-    description="OpenAI-compatible API wrapper for Claude Agent SDK",
+    description="Anthropic Messages API wrapper for Claude Agent SDK",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -66,9 +65,7 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(chat.router, prefix="/v1")
 app.include_router(anthropic.router, prefix="/v1")
-app.include_router(models.router, prefix="/v1")
 app.include_router(sessions.router, prefix="/v1")
 
 
@@ -84,11 +81,9 @@ async def root():
     return {
         "name": "Claude Code Wrapper",
         "version": "1.0.0",
-        "description": "OpenAI-compatible API for Claude Agent SDK",
+        "description": "Anthropic Messages API for Claude Agent SDK",
         "endpoints": {
-            "chat": "/v1/chat/completions",
             "messages": "/v1/messages",
-            "models": "/v1/models",
             "sessions": "/v1/sessions",
             "health": "/health",
         },

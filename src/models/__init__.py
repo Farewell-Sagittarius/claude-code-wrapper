@@ -1,6 +1,6 @@
-"""Data models for OpenAI and Anthropic APIs."""
+"""Data models for Anthropic API."""
 
-from . import anthropic, openai
+from . import anthropic
 from .common import (
     McpHttpServerConfig,
     McpServerConfig,
@@ -10,10 +10,7 @@ from .common import (
 )
 
 __all__ = [
-    # Submodules
     "anthropic",
-    "openai",
-    # Common
     "McpHttpServerConfig",
     "McpServerConfig",
     "McpSSEServerConfig",

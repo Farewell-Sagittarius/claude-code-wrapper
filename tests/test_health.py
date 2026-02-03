@@ -13,7 +13,7 @@ class TestHealthEndpoints:
         assert response.status_code == 200
 
         data = response.json()
-        assert data["name"] == "Claude OpenAI Wrapper"
+        assert data["name"] == "Claude Code Wrapper"
         assert data["version"] == "1.0.0"
         assert "endpoints" in data
         assert data["endpoints"]["chat"] == "/v1/chat/completions"
@@ -39,4 +39,4 @@ class TestHealthEndpoints:
         response = client.get("/openapi.json")
         assert response.status_code == 200
         data = response.json()
-        assert data["info"]["title"] == "Claude OpenAI Wrapper"
+        assert data["info"]["title"] == "Claude Code Wrapper"

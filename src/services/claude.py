@@ -7,8 +7,8 @@ import tempfile
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 
+from ..adapters.anthropic_adapter import AnthropicAdapter
 from ..adapters.base import estimate_tokens
-from ..adapters.openai_adapter import OpenAIAdapter
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -253,7 +253,7 @@ class ClaudeService:
         if isinstance(content, str):
             return content
         if isinstance(content, list):
-            text = OpenAIAdapter.extract_text_from_content(content)
+            text = AnthropicAdapter.extract_text_from_content(content)
             return text if text else None
         return None
 
@@ -312,8 +312,7 @@ class ClaudeService:
             messages: List of message dictionaries
 
         Returns:
-            Usage dictionary with prompt_tokens, completion_tokens, total_tokens,
-            and additional fields for OpenWebUI compatibility
+            Usage dictionary with input_tokens and output_tokens (Anthropic format)
         """
         for msg in messages:
             # Check for result message (subtype=success) with usage data
@@ -324,27 +323,11 @@ class ClaudeService:
                 cache_creation = usage.get("cache_creation_input_tokens", 0)
                 cache_read = usage.get("cache_read_input_tokens", 0)
 
-                # Calculate total prompt tokens (input + cache)
-                prompt_tokens = input_tokens + cache_creation + cache_read
-
-                # Import models here to avoid circular import
-                from ..models.openai import PromptTokensDetails, CompletionTokensDetails
-
                 return {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": output_tokens,
-                    "total_tokens": prompt_tokens + output_tokens,
-                    # Additional details for OpenWebUI
-                    "prompt_tokens_details": PromptTokensDetails(
-                        cached_tokens=cache_read,
-                        audio_tokens=0,
-                    ),
-                    "completion_tokens_details": CompletionTokensDetails(
-                        reasoning_tokens=0,
-                        audio_tokens=0,
-                        accepted_prediction_tokens=0,
-                        rejected_prediction_tokens=0,
-                    ),
+                    "input_tokens": input_tokens + cache_creation + cache_read,
+                    "output_tokens": output_tokens,
+                    "cache_creation_input_tokens": cache_creation,
+                    "cache_read_input_tokens": cache_read,
                 }
         return None
 
@@ -360,7 +343,7 @@ class ClaudeService:
             model: Model name (for future model-specific estimation)
 
         Returns:
-            Dictionary with token counts
+            Dictionary with input_tokens and output_tokens (Anthropic format)
         """
         # Handle multimodal prompts
         if isinstance(prompt, list):
@@ -381,11 +364,10 @@ class ClaudeService:
         else:
             prompt_text = prompt
 
-        prompt_tokens = estimate_tokens(prompt_text)
-        completion_tokens = estimate_tokens(completion)
+        input_tokens = estimate_tokens(prompt_text)
+        output_tokens = estimate_tokens(completion)
 
         return {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
         }
