@@ -1,6 +1,7 @@
 """Anthropic format adapter - converts Anthropic messages to Claude format."""
 
 import base64
+import json
 import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -96,6 +97,28 @@ class AnthropicAdapter:
 
         elif block_type == "document":
             return await cls.process_document_block(block, cwd)
+
+        elif block_type == "tool_use":
+            # Tool use block from assistant - format as text
+            tool_name = block.get("name", "unknown_tool")
+            tool_id = block.get("id", "")
+            tool_input = block.get("input", {})
+            return f"[Tool Call: {tool_name} (id: {tool_id})]\nInput: {json.dumps(tool_input)}"
+
+        elif block_type == "tool_result":
+            # Tool result block from user - format as text
+            tool_use_id = block.get("tool_use_id", "")
+            is_error = block.get("is_error", False)
+            content = block.get("content", "")
+            if isinstance(content, list):
+                # Content can be a list of content blocks
+                content_parts = []
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        content_parts.append(part.get("text", ""))
+                content = "\n".join(content_parts)
+            status = "Error" if is_error else "Result"
+            return f"[Tool {status} (id: {tool_use_id})]: {content}"
 
         return None
 
